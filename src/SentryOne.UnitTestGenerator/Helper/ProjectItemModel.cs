@@ -1,6 +1,7 @@
-﻿namespace SentryOne.UnitTestGenerator.Helper
+namespace SentryOne.UnitTestGenerator.Helper
 {
     using System;
+    using System.Collections.Generic;
     using System.Globalization;
     using System.Linq;
     using EnvDTE;
@@ -51,20 +52,41 @@
             get
             {
                 ThreadHelper.ThrowIfNotOnUIThread();
-                var targetProjectName = TargetProjectName;
-                foreach (var project in Project.DTE.Solution.Projects.OfType<Project>())
-                {
-                    if (string.Equals(project.Name, targetProjectName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return project;
-                    }
-                }
-
-                return null;
+                return FindProject(TargetProjectName, Project.DTE.Solution.Projects.OfType<Project>());
             }
         }
 
+#pragma warning disable VSTHRD010
+        private Project FindProject(string targetProjectName, IEnumerable<Project> currentProjects)
+        {
+            foreach (var project in currentProjects)
+            {
+                if (string.Equals(project.Name, targetProjectName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return project;
+                }
+                else if (project.Kind == VsProjectKindSolutionFolder)
+                {
+                    var subProjects = project
+                            .ProjectItems
+                            .OfType<ProjectItem>()
+                            .Where(item => item.SubProject != null)
+                            .Select(item => item.SubProject);
+                    var candidate = FindProject(targetProjectName, subProjects);
+                    if (candidate != null)
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+#pragma warning restore VSTHRD010
         public string TargetProjectName { get; }
+
+        private const string VsProjectKindSolutionFolder = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}";
 
         public static bool IsSupported(ProjectItemModel item)
         {
